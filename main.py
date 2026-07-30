@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException ,Header
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import create_client
@@ -21,13 +21,37 @@ class UserAuth(BaseModel):
 def home():
     return {"message": "Connected to Supabase successfully!"}
 
+@app.get("/public/info")
+def public_info():
+    return {
+        "message": "Welcome stranger! This info is public."
+    }
+
+@app.get("/protected/profile")
+def protected_profile(authorization: str = Header(default=None)):
+    if (
+        authorization is None
+        or not authorization.startswith("Bearer ")
+        or len(authorization.split(" ")) < 2
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "Access token required"}
+        )
+
+    token = authorization.split(" ")[1]
+
+    return {
+        "message": "Protected route accessed.",
+        "access_token": token
+    }
 @app.post("/auth/signup")
 def signup(user: UserAuth):
     try:
         response = supabase.auth.sign_up(
             {
                 "email": user.email,
-                "password": user.password,
+                "password": user.password
             }
         )
         return response
@@ -40,7 +64,7 @@ def login(user: UserAuth):
         response = supabase.auth.sign_in_with_password(
             {
                 "email": user.email,
-                "password": user.password,
+                "password": user.password
             }
         )
         return {
