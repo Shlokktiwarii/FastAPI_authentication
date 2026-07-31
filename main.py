@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException ,Header
+from fastapi import FastAPI, HTTPException ,Header ,Depends
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import create_client
@@ -26,24 +26,32 @@ def public_info():
     return {
         "message": "Welcome stranger! This info is public."
     }
-
-@app.get("/protected/profile")
-def protected_profile(authorization: str = Header(default=None)):
+def verify_token(authorization:str=Header(default=None)):
     if (
-        authorization is None
-        or not authorization.startswith("Bearer ")
-        or len(authorization.split(" ")) < 2
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail={"error": "Access token required"}
-        )
-
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or len(authorization.split(" ")) < 2
+        ):
+            raise HTTPException(
+                status_code=401,
+                detail={"error": "Access token required"}
+            )
+    
     token = authorization.split(" ")[1]
+    
+    try:
+        response= supabase.auth.get_user(token)
+        return response.user
+    except Exception as e:
+        raise HTTPException (
+           status_code=401,detail=str(e))
+        
+@app.get("/protected/profile")
+def protected_profile(user=Depends(verify_token)):
 
     return {
         "message": "Protected route accessed.",
-        "access_token": token
+        "user": user
     }
 @app.post("/auth/signup")
 def signup(user: UserAuth):
@@ -73,3 +81,14 @@ def login(user: UserAuth):
         }
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+@app.post("/auth/logout",status_code=200)
+def logout(token: str=Depends(verify_token)):
+    try:
+        supabase.auth.sign_out()
+
+        return {
+            "message":"Logged out successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400,detail=str(e))
